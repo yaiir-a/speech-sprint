@@ -249,7 +249,7 @@ export default function Main({ jwt }: MainProps) {
       3 x (she sells sea shells on the seashore)<br />
       <br />
 
-      Checked Twister (red = not said yet): <br />
+      Checked Twister (Text will turn blue once it has been recognised): <br />
       {checkedTwister.map(item => {
         const color = item.isCorrect ? 'blue' : "red"
         return <Text color={color}> {item.word}</Text>
