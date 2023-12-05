@@ -1,6 +1,8 @@
 import '../styles/main.css';
 import { AppProps } from 'next/app';
 import Head from 'next/head';
+import { Theme } from '@radix-ui/themes';
+import '@radix-ui/themes/styles.css';
 
 // This default export is required in a new `pages/_app.js` file.
 export default function MyApp({ Component, pageProps }: AppProps<{}>) {
@@ -13,7 +15,9 @@ export default function MyApp({ Component, pageProps }: AppProps<{}>) {
           content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
         />
       </Head>
-      <Component {...pageProps} />
+        <Theme>
+          <Component {...pageProps} />
+        </Theme>
     </>
   );
 }

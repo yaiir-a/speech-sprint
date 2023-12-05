@@ -15,6 +15,7 @@ import {
   useRequestDevices,
 } from '../utils/recorder';
 import { getJwt } from '../utils/auth';
+import { Text } from '@radix-ui/themes';
 
 // The mic drop down can be populated with client state, so we don't server render it to prevent hydration errors
 const MicSelect = dynamic(() => import('../components/MicSelect'), {
@@ -25,12 +26,36 @@ type MainProps = { jwt?: string };
 
 type SessionState = 'configure' | 'starting' | 'blocked' | 'error' | 'running';
 
+type SpokenWord = {
+  word: string;
+  status?: 'final' | 'partial';
+  isCorrect?: boolean;
+  start_time?: number;
+  end_time?: number; 
+}
+
+
+
 export default function Main({ jwt }: MainProps) {
   const [transcription, setTranscription] = useState<
-    RealtimeRecognitionResult[]
+    SpokenWord[]
   >([]);
+  const [transcriptionWithPartial, setTranscriptionWithPartial] = useState<SpokenWord[]>([])
   const [audioDeviceIdState, setAudioDeviceId] = useState<string>('');
   const [sessionState, setSessionState] = useState<SessionState>('configure');
+
+
+  const twister = [
+    'peter', 'piper', 'picked', 'a', 'peck', 'of', 'pickled', 'peppers',
+    'peter', 'piper', 'picked', 'a', 'peck', 'of', 'pickled', 'peppers',
+    'peter', 'piper', 'picked', 'a', 'peck', 'of', 'pickled', 'peppers',
+    'she', 'sells', 'seashells', 'on', 'the', 'seashore',
+    'she', 'sells', 'seashells', 'on', 'the', 'seashore',
+    'she', 'sells', 'seashells', 'on', 'the', 'seashore',
+  ]
+  const [checkedTwister, setCheckedTwister] = useState<SpokenWord[]>([])
+  const [isCompleteTwister, setIsCompleteTwister] = useState(false)
+
 
   const rtSessionRef = useRef<RealtimeSession>(new RealtimeSession(jwt));
 
@@ -44,6 +69,55 @@ export default function Main({ jwt }: MainProps) {
     !devices.some((item) => item.deviceId === audioDeviceIdState)
       ? devices[0].deviceId
       : audioDeviceIdState;
+
+  const resultMapper = (result: RealtimeRecognitionResult, status: "partial" | "final"): SpokenWord => {
+    return {
+      word: result?.alternatives?.[0]?.content.toLowerCase(),
+      status: status,
+      start_time: result?.start_time,
+      end_time: result?.end_time
+    }
+  }
+
+  const resultsChecker = (results: SpokenWord[], twister: string[]): SpokenWord[] =>{
+    let neededIndex = 0
+    let out: SpokenWord[] = []   
+    results.forEach(result => {
+      out.push({
+        word: result.word,
+        status: result.status,
+        start_time: result.start_time,
+        end_time: result.end_time,
+        isCorrect: result.word === twister[neededIndex]
+      })
+      if (result.word === twister[neededIndex]){
+        neededIndex += 1
+      }
+    })
+    return out
+  }
+
+  const twisterChecker = (results: SpokenWord[], twister: string[]): SpokenWord[] => {
+    const correctWords = results.filter(result=> result.isCorrect)
+    const remainingWords: SpokenWord[] = twister.slice(correctWords.length).map( word => {
+      return {
+        word: word,
+        isCorrect: false
+      }
+      
+    })
+
+    return correctWords.concat(remainingWords)
+  }
+
+  useEffect(()=>{
+    
+    setCheckedTwister(twisterChecker(transcriptionWithPartial, twister))
+    setIsCompleteTwister(checkedTwister.filter(item=> item.isCorrect).length === twister.length)
+    if(isCompleteTwister){
+      stopTranscription()
+    }
+  }, [transcriptionWithPartial])
 
   // sendAudio is used as a wrapper for the websocket to check the socket is finished init-ing before sending data
   const sendAudio = (data: Blob) => {
@@ -60,7 +134,26 @@ export default function Main({ jwt }: MainProps) {
 
   // Attach our event listeners to the realtime session
   rtSessionRef.current.addListener('AddTranscript', (res) => {
-    setTranscription([...transcription, ...res.results]);
+        const newWords = res.results
+        .filter((result) => result.type == 'word')
+        .map((result)=> {
+          return resultMapper(result, "final")
+        })
+
+    setTranscription([...transcription, ...newWords]);
+  });
+
+  rtSessionRef.current.addListener('AddPartialTranscript', (res) => {
+    const newWords = res.results
+        .filter((result) => result.type == 'word')
+        .map((result)=> {
+          return resultMapper(result, "partial")
+        })
+
+    const checked = resultsChecker([...transcription, ...newWords], twister)
+    console.log(checked);
+    
+    setTranscriptionWithPartial(checked) 
   });
 
   // start audio recording once the websocket is connected
@@ -90,7 +183,11 @@ export default function Main({ jwt }: MainProps) {
     }
     try {
       await rtSessionRef.current.start({
-        transcription_config: { max_delay: 2, language: 'en' },
+        transcription_config: { 
+          max_delay: 2, 
+          language: 'en', 
+          operating_point:"enhanced", 
+          enable_partials: true },
         audio_format: {
           type: 'file',
         },
@@ -109,6 +206,7 @@ export default function Main({ jwt }: MainProps) {
   return (
     <div>
       <div className='flex-row'>
+        
         <p>Select Microphone</p>
         {(sessionState === 'blocked' || denied) && (
           <p className='warning-text'>Microphone permission is blocked</p>
@@ -137,20 +235,49 @@ export default function Main({ jwt }: MainProps) {
         stopTranscription={stopTranscription}
         startTranscription={startTranscription}
       />
+
       {sessionState === 'error' && (
         <p className='warning-text'>Session encountered an error</p>
       )}
+
       {['starting', 'running', 'configure', 'blocked'].includes(
         sessionState,
       ) && <p>State: {sessionState}</p>}
-      <p>
-        {transcription.map(
-          (item, index) =>
-            (index && !['.', ','].includes(item?.alternatives?.[0]?.content)
-              ? ' '
-              : '') + item?.alternatives?.[0]?.content,
-        )}
-      </p>
+
+      Needed text: <br/> 
+      3 x (peter piper picked a peck of pickled peppers) <br />
+      3 x (she sells sea shells on the seashore)<br />
+      <br />
+
+      Checked Twister (red = not said yet): <br />
+      {checkedTwister.map(item => {
+        const color = item.isCorrect ? 'blue' : "red"
+        return <Text color={color}> {item.word}</Text>
+      })}
+
+      <br />
+      <br />
+
+
+      {isCompleteTwister? `COMPLETE!! Time taken: ${(checkedTwister.at(-1).end_time - checkedTwister[0].start_time).toFixed(2)} seconds`: "NOT COMPLETE"}
+
+      <br />
+      <br />
+
+
+      Spoken text: <br />
+      {transcriptionWithPartial.length > 0 ? transcriptionWithPartial.map(
+          (item) => {
+            const color = item.isCorrect ? 'blue' : "red"
+            const weight = item.status === 'final'? 'regular' : "light"
+            return <Text color={color} weight={weight} trim={"normal"}>{item.word} </Text>}
+      ): '<Waiting for text>' }
+
+      
+
+
+      
+ 
     </div>
   );
 }
