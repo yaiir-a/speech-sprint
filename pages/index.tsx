@@ -37,13 +37,10 @@ type SpokenWord = {
 
 
 export default function Main({ jwt }: MainProps) {
-  const [transcription, setTranscription] = useState<
-    SpokenWord[]
-  >([]);
+  const [transcription, setTranscription] = useState<SpokenWord[]>([]);
   const [transcriptionWithPartial, setTranscriptionWithPartial] = useState<SpokenWord[]>([])
   const [audioDeviceIdState, setAudioDeviceId] = useState<string>('');
   const [sessionState, setSessionState] = useState<SessionState>('configure');
-
 
   const twister = [
     'peter', 'piper', 'picked', 'a', 'peck', 'of', 'pickled', 'peppers',
@@ -80,6 +77,7 @@ export default function Main({ jwt }: MainProps) {
   }
 
   const resultsChecker = (results: SpokenWord[], twister: string[]): SpokenWord[] =>{
+    // Returns each spoken word and says if it is a correct match with the twister
     let neededIndex = 0
     let out: SpokenWord[] = []   
     results.forEach(result => {
@@ -98,6 +96,7 @@ export default function Main({ jwt }: MainProps) {
   }
 
   const twisterChecker = (results: SpokenWord[], twister: string[]): SpokenWord[] => {
+    // Returns each word in the twister and says if it has been spoken yet or not
     const correctWords = results.filter(result=> result.isCorrect)
     const remainingWords: SpokenWord[] = twister.slice(correctWords.length).map( word => {
       return {
@@ -272,12 +271,6 @@ export default function Main({ jwt }: MainProps) {
             const weight = item.status === 'final'? 'regular' : "light"
             return <Text color={color} weight={weight} trim={"normal"}>{item.word} </Text>}
       ): '<Waiting for text>' }
-
-      
-
-
-      
- 
     </div>
   );
 }
