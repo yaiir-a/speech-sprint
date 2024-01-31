@@ -50,7 +50,21 @@ export default function Main({ jwt }: MainProps) {
     'she', 'sells', 'seashells', 'on', 'the', 'seashore',
     'she', 'sells', 'seashells', 'on', 'the', 'seashore',
   ]
-  const [checkedTwister, setCheckedTwister] = useState<SpokenWord[]>([])
+
+
+  const twisterChecker = (results: SpokenWord[], twister: string[]): SpokenWord[] => {
+    // Returns each word in the twister and says if it has been spoken yet or not
+    const correctWords = results.filter(result=> result.isCorrect)
+    const remainingWords: SpokenWord[] = twister.slice(correctWords.length).map( word => {
+      return {
+        word: word,
+        isCorrect: false
+      }
+    })
+    return correctWords.concat(remainingWords)
+  }
+
+  const [checkedTwister, setCheckedTwister] = useState<SpokenWord[]>(twisterChecker(transcriptionWithPartial, twister))
   const [isCompleteTwister, setIsCompleteTwister] = useState(false)
 
 
@@ -79,7 +93,7 @@ export default function Main({ jwt }: MainProps) {
   const resultsChecker = (results: SpokenWord[], twister: string[]): SpokenWord[] =>{
     // Returns each spoken word and says if it is a correct match with the twister
     let neededIndex = 0
-    let out: SpokenWord[] = []   
+    const out: SpokenWord[] = []   
     results.forEach(result => {
       out.push({
         word: result.word,
@@ -95,28 +109,18 @@ export default function Main({ jwt }: MainProps) {
     return out
   }
 
-  const twisterChecker = (results: SpokenWord[], twister: string[]): SpokenWord[] => {
-    // Returns each word in the twister and says if it has been spoken yet or not
-    const correctWords = results.filter(result=> result.isCorrect)
-    const remainingWords: SpokenWord[] = twister.slice(correctWords.length).map( word => {
-      return {
-        word: word,
-        isCorrect: false
-      }
-      
-    })
 
-    return correctWords.concat(remainingWords)
+  const completionChecker = (checkedTwister: SpokenWord[]) =>{
+    return checkedTwister.filter(item=> item.isCorrect).length === twister.length
   }
 
-  useEffect(()=>{
-    
+  const handlePartial = () => {
     setCheckedTwister(twisterChecker(transcriptionWithPartial, twister))
-    setIsCompleteTwister(checkedTwister.filter(item=> item.isCorrect).length === twister.length)
+    setIsCompleteTwister(completionChecker(checkedTwister))
     if(isCompleteTwister){
       stopTranscription()
     }
-  }, [transcriptionWithPartial])
+  }
 
   // sendAudio is used as a wrapper for the websocket to check the socket is finished init-ing before sending data
   const sendAudio = (data: Blob) => {
@@ -134,7 +138,7 @@ export default function Main({ jwt }: MainProps) {
   // Attach our event listeners to the realtime session
   rtSessionRef.current.addListener('AddTranscript', (res) => {
         const newWords = res.results
-        .filter((result) => result.type == 'word')
+        .filter((result) => result.type === 'word')
         .map((result)=> {
           return resultMapper(result, "final")
         })
@@ -144,7 +148,7 @@ export default function Main({ jwt }: MainProps) {
 
   rtSessionRef.current.addListener('AddPartialTranscript', (res) => {
     const newWords = res.results
-        .filter((result) => result.type == 'word')
+        .filter((result) => result.type === 'word')
         .map((result)=> {
           return resultMapper(result, "partial")
         })
@@ -152,7 +156,8 @@ export default function Main({ jwt }: MainProps) {
     const checked = resultsChecker([...transcription, ...newWords], twister)
     console.log(checked);
     
-    setTranscriptionWithPartial(checked) 
+    setTranscriptionWithPartial(checked)
+    handlePartial() 
   });
 
   // start audio recording once the websocket is connected
@@ -206,7 +211,7 @@ export default function Main({ jwt }: MainProps) {
     <div>
       <div className='flex-row'>
         
-        <p>Select Microphone</p>
+        <p>Select Microphone!</p>
         {(sessionState === 'blocked' || denied) && (
           <p className='warning-text'>Microphone permission is blocked</p>
         )}
